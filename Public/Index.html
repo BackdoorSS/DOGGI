@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Multiplayer Shooting Game</title>
+  <style>
+    canvas {
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('gameCanvas');
+    const context = canvas.getContext('2d');
+
+    const players = {};
+    const bullets = {};
+    const bulletSpeed = 5;
+
+    // Character settings
+    const player = {
+      x: 50,
+      y: 50,
+      radius: 10,
+      color: 'blue',
+      speed: 5,
+    };
+
+    // Listen for player movement
+    document.addEventListener('keydown', (event) => {
+      movePlayer(event);
+    });
+
+    function movePlayer(event) {
+      const movement = { x: 0, y: 0 };
+      switch (event.key) {
+        case 'ArrowLeft':
+          movement.x = -player.speed;
+          break;
+        case 'ArrowRight':
+          movement.x = player.speed;
+          break;
+        case 'ArrowUp':
+          movement.y = -player.speed;
+          break;
+        case 'ArrowDown':
+          movement.y = player.speed;
+          break;
+      }
+
+      player.x += movement.x;
+      player.y += movement.y;
+
+      socket.emit('playerMovement', player);
+    }
+
+    // Listen for mouse click to shoot
+    canvas.addEventListener('click', (event) => {
+      const bullet = {
+        x: player.x,
+        y: player.y,
+        direction: getMouseDirection(event.clientX, event.clientY),
+      };
+      socket.emit('shoot', bullet);
+    });
+
+    function getMouseDirection(targetX, targetY) {
+      const dx = targetX - player.x;
+      const dy = targetY - player.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      return { x: (dx / distance) * bulletSpeed, y: (dy / distance) * bulletSpeed };
+    }
+
+    // Rendering
+    function draw() {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw players
+      for (const id in players) {
+        drawPlayer(players[id]);
+      }
+
+      // Draw bullets
+      for (const id in bullets) {
+        drawBullet(bullets[id]);
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    function drawPlayer(p) {
+      context.beginPath();
+      context.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      context.fillStyle = p.color;
+      context.fill();
+      context.closePath();
+    }
+
+    function drawBullet(bullet) {
+      context.beginPath();
+      context.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
+      context.fillStyle = 'red';
+      context.fill();
+      context.closePath();
+    }
+
+    socket.on('currentPlayers', (serverPlayers) => {
+      players = serverPlayers;
+    });
+
+    socket.on('newPlayer', (newPlayer) => {
+      players[newPlayer.id] = newPlayer;
+    });
+
+    socket.on('playerMoved', (data) => {
+      players[data.id] = data;
+    });
+
+    socket.on('playerDisconnected', (id) => {
+      delete players[id];
+    });
+
+    socket.on('bulletShot', (bullet) => {
+      bullets[bullet.id] = bullet;
+    });
+
+    socket.on('bulletHit', (bulletId) => {
+      delete bullets[bulletId];
+    });
+
+    draw();
+  </script>
+</body>
+</html>
